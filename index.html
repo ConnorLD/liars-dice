@@ -21,6 +21,7 @@
   <header class="topbar">
     <h1>Liar's Dice</h1>
     <p class="tagline">Your cup. Nobody else's business.</p>
+    <button id="helpBtn" class="help-btn" type="button" aria-label="How to play">?</button>
   </header>
 
   <!-- The cup: dice live under here, hidden until you peek -->
@@ -72,6 +73,70 @@
   <footer class="hint" id="hint">Press Roll, then hold the cup to see your dice.</footer>
 
 </main>
+
+<dialog id="helpDialog" class="help" aria-labelledby="helpTitle">
+  <div class="help-head">
+    <h2 id="helpTitle">How to play</h2>
+    <button id="helpClose" class="help-close" type="button" aria-label="Close">&times;</button>
+  </div>
+
+  <div class="help-body">
+
+    <h3>The idea</h3>
+    <p>
+      Everyone hides a cup of dice. Players take turns claiming how many of a
+      face are on the <em>whole</em> table &mdash; bluffing freely &mdash; until
+      someone calls the last claim a lie. Lose a die when you are wrong. Last
+      player with dice wins.
+    </p>
+
+    <h3>Order of play</h3>
+    <ol>
+      <li>Everyone rolls and peeks at their own dice.</li>
+      <li>The starting player opens with a bid, like <strong>&ldquo;three 4s&rdquo;</strong>.</li>
+      <li>Going clockwise, each player either <strong>raises</strong> the bid or <strong>calls liar</strong>.</li>
+      <li>On a call, everyone lifts their cups and counts that face.</li>
+      <li>Whoever was wrong loses a die. Everyone re-rolls and the next round begins.</li>
+    </ol>
+
+    <h3>Bidding</h3>
+    <p>
+      A bid is a quantity plus a face, and it covers every die on the table, not
+      just your own. Each bid must beat the one before it:
+    </p>
+    <ul>
+      <li>Raise the <strong>quantity</strong> &mdash; three 4s &rarr; four 4s (any face is fine once the quantity goes up).</li>
+      <li>Or keep the quantity and raise the <strong>face</strong> &mdash; three 4s &rarr; three 5s.</li>
+    </ul>
+    <p class="help-note">Three 4s &rarr; three 2s is not a raise. The face went down.</p>
+
+    <h3>Ones are wild</h3>
+    <p>
+      A 1 counts as whatever face is being bid. If the bid is &ldquo;four 3s&rdquo;,
+      every 3 <em>and</em> every 1 on the table counts toward it. Because of that,
+      nobody bids on 1s directly in most groups.
+    </p>
+
+    <h3>Calling liar</h3>
+    <p>Instead of raising, challenge the bid. Cups come up and you count the face:</p>
+    <ul>
+      <li><strong>Fewer</strong> than the bid &rarr; the <strong>bidder</strong> was lying and loses a die.</li>
+      <li><strong>That many or more</strong> &rarr; the bid was good and the <strong>challenger</strong> loses a die.</li>
+    </ul>
+    <p>
+      Whoever lost the die presses <strong>&minus;</strong> here to drop it. At zero
+      dice you are out; the last player standing wins.
+    </p>
+
+    <h3>Common house rules</h3>
+    <ul>
+      <li><strong>Spot on:</strong> call the bid exactly right and the bidder loses a die instead of you &mdash; or everyone else does.</li>
+      <li><strong>Palifico:</strong> when a player is down to one die, 1s stop being wild for that round.</li>
+      <li>Some tables play with no wilds at all. Agree before you start.</li>
+    </ul>
+
+  </div>
+</dialog>
 
 <script src="app.js"></script>
 </body>

@@ -13,6 +13,8 @@ keep it hidden from the table, and peek whenever you like.
 - **− / +** change how many dice you have (1–6) when you lose or gain one.
   Changing the count clears the old hand so you never read a stale roll.
 - **New game** resets everyone to five dice.
+- **?** opens the rules and the order of play. Dismiss it with the X, the
+  backdrop, or Escape.
 
 Your dice count, peek mode, and current hand survive a refresh. The cup is always
 closed when the page loads, and it snaps shut if the app is backgrounded.

@@ -42,7 +42,26 @@ body {
 
 /* ---------- header ---------- */
 
-.topbar { text-align: center; }
+.topbar { text-align: center; position: relative; }
+
+.help-btn {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 1px solid rgba(227,180,72,0.45);
+  background: rgba(0,0,0,0.25);
+  color: var(--gold);
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.help-btn:active { background: rgba(227,180,72,0.18); }
 
 h1 {
   font-size: 1.35rem;
@@ -283,4 +302,90 @@ h1 {
   font-size: 0.75rem;
   color: rgba(143,176,162,0.75);
   min-height: 1.1rem;
+}
+
+/* ---------- help dialog ---------- */
+
+.help {
+  /* Centred explicitly so the panel also lands correctly if a browser lacks
+     showModal() and we fall back to opening the dialog non-modally. */
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  margin: 0;
+  width: min(520px, calc(100vw - 24px));
+  max-height: min(82vh, 720px);
+  padding: 0;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: var(--radius);
+  background: #10251d;
+  color: var(--ink);
+  box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+  overflow: hidden;
+}
+
+.help::backdrop { background: rgba(0,0,0,0.66); }
+
+.help-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 14px 8px 14px 18px;
+  border-bottom: 1px solid rgba(255,255,255,0.1);
+  background: rgba(0,0,0,0.25);
+}
+
+.help-head h2 {
+  font-size: 1rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.help-close {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border: none;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 1.7rem;
+  line-height: 1;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.help-close:active { background: rgba(255,255,255,0.1); }
+
+.help-body {
+  padding: 4px 18px calc(env(safe-area-inset-bottom) + 20px);
+  overflow-y: auto;
+  max-height: calc(min(82vh, 720px) - 62px);
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.help-body h3 {
+  margin: 18px 0 6px;
+  font-size: 0.76rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--gold);
+}
+
+.help-body p { margin-bottom: 8px; color: var(--ink); }
+.help-body ul, .help-body ol { margin: 0 0 8px 1.15rem; }
+.help-body li { margin-bottom: 6px; }
+.help-body strong { color: #fff; }
+
+.help-note {
+  font-size: 0.84rem;
+  color: var(--ink-dim);
+  border-left: 2px solid rgba(227,180,72,0.5);
+  padding-left: 10px;
 }

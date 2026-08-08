@@ -19,6 +19,9 @@
   var modeBtn = document.getElementById('modeBtn');
   var modeText = document.getElementById('modeText');
   var resetBtn = document.getElementById('resetBtn');
+  var helpBtn = document.getElementById('helpBtn');
+  var helpDialog = document.getElementById('helpDialog');
+  var helpClose = document.getElementById('helpClose');
 
   var state = {
     count: START_DICE,
@@ -199,6 +202,28 @@
     save();
     render();
     setHint('New game. Everyone back to ' + START_DICE + ' dice.');
+  });
+
+  // ---------- help ----------
+
+  function openHelp() {
+    setOpen(false); // never leave a hand on show behind the dialog
+    if (helpDialog.showModal) helpDialog.showModal();
+    else helpDialog.setAttribute('open', '');
+    helpDialog.querySelector('.help-body').scrollTop = 0;
+  }
+
+  function closeHelp() {
+    if (helpDialog.close) helpDialog.close();
+    else helpDialog.removeAttribute('open');
+  }
+
+  helpBtn.addEventListener('click', openHelp);
+  helpClose.addEventListener('click', closeHelp);
+
+  // Tapping the backdrop dismisses: the dialog itself is only hit outside the panel.
+  helpDialog.addEventListener('click', function (e) {
+    if (e.target === helpDialog) closeHelp();
   });
 
   // Peeking. In hold mode the cup tracks the press; in tap mode it toggles.
