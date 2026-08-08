@@ -44,10 +44,16 @@ body {
 
 .topbar { text-align: center; position: relative; }
 
-.help-btn {
+.topbar-actions {
   position: absolute;
   top: -4px;
   right: -4px;
+  display: flex;
+  gap: 8px;
+}
+
+.icon-btn {
+  position: relative;
   width: 40px;
   height: 40px;
   border-radius: 50%;
@@ -57,11 +63,27 @@ body {
   font-size: 1.15rem;
   font-weight: 700;
   line-height: 1;
+  display: grid;
+  place-items: center;
   cursor: pointer;
   touch-action: manipulation;
 }
 
-.help-btn:active { background: rgba(227,180,72,0.18); }
+.icon-btn:active { background: rgba(227,180,72,0.18); }
+
+.icon-people { width: 21px; height: 21px; fill: currentColor; }
+.icon-people path { fill: currentColor; }
+
+.net-dot {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #4ade80;
+  border: 2px solid #0f2a22;
+}
 
 h1 {
   font-size: 1.35rem;
@@ -354,6 +376,260 @@ h1 {
   color: rgba(143,176,162,0.75);
   min-height: 1.1rem;
 }
+
+/* ---------- connected play ---------- */
+
+/* The cup gives up a little height once the table strip and showdown appear. */
+body.connected .cup { min-height: 168px; }
+
+/* The tagline is decoration; connected play needs the pixels more. */
+body.connected .tagline { display: none; }
+
+/* Two header buttons crowd the title on the narrowest phones. */
+@media (max-width: 360px) {
+  h1 { font-size: 1.02rem; }
+  .icon-btn { width: 36px; height: 36px; }
+  .topbar-actions { gap: 6px; }
+}
+
+/* Short screens: shrink the cup and its dice so Roll stays above the fold.
+   Scoped to the tray -- the showdown's mini dice must keep their own size. */
+@media (max-height: 680px) {
+  body.connected .cup { min-height: 140px; }
+  body.connected #tray .die { width: 46px; height: 46px; padding: 6px; }
+  body.connected .showdown { max-height: 24vh; }
+}
+
+.table-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 8px 14px;
+  border: 1px solid rgba(255,255,255,0.1);
+  border-radius: var(--radius);
+  background: rgba(0,0,0,0.28);
+}
+
+.table-info { flex: 1; min-width: 0; }
+
+.table-code {
+  display: block;
+  font-size: 1.05rem;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  color: var(--gold);
+}
+
+.table-who {
+  display: block;
+  font-size: 0.72rem;
+  color: var(--ink-dim);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.reveal-btn {
+  flex: none;
+  padding: 13px 20px;
+  border: none;
+  border-radius: 12px;
+  background: #2f6d52;
+  color: #eafff4;
+  font-size: 0.9rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.reveal-btn:active { background: #3a8465; }
+
+.reveal-btn[aria-disabled="true"] {
+  background: rgba(255,255,255,0.07);
+  color: var(--ink-dim);
+  cursor: not-allowed;
+}
+
+.showdown {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 30vh;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.sd-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 12px;
+  border-radius: 12px;
+  background: rgba(0,0,0,0.24);
+  border: 1px solid rgba(255,255,255,0.07);
+}
+
+.sd-row.is-self { border-color: rgba(227,180,72,0.35); }
+
+.sd-name {
+  flex: none;
+  max-width: 34%;
+  font-size: 0.8rem;
+  color: var(--ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.sd-dice { display: flex; flex-wrap: wrap; gap: 5px; flex: 1; }
+
+.die--mini {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  padding: 4px;
+  box-shadow: 0 2px 0 rgba(0,0,0,0.3);
+  animation: none;
+}
+
+.sd-hidden { display: flex; gap: 5px; flex: 1; }
+
+.sd-blank {
+  width: 26px;
+  height: 26px;
+  border-radius: 6px;
+  border: 1px dashed rgba(255,255,255,0.22);
+}
+
+.sd-note { font-size: 0.72rem; color: var(--ink-dim); }
+.sd-warn { font-size: 0.72rem; color: #f0a5a5; }
+
+/* dialog bits */
+
+.field { display: block; margin: 12px 0; }
+
+.field-label {
+  display: block;
+  font-size: 0.72rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 6px;
+}
+
+.field-input {
+  width: 100%;
+  padding: 13px 14px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.16);
+  background: rgba(0,0,0,0.3);
+  color: var(--ink);
+  font-size: 1rem;
+  font-family: inherit;
+}
+
+.field-input:focus { outline: 2px solid var(--gold); outline-offset: 1px; }
+
+.code-input {
+  flex: 1;
+  min-width: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.3em;
+  font-weight: 700;
+  text-align: center;
+}
+
+.net-primary, .net-secondary {
+  width: 100%;
+  padding: 15px;
+  border: none;
+  border-radius: 12px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  touch-action: manipulation;
+  font-family: inherit;
+}
+
+.net-primary { background: linear-gradient(180deg, var(--gold), var(--gold-deep)); color: #221703; }
+.net-primary:active { filter: brightness(1.08); }
+.net-primary:disabled { opacity: 0.55; cursor: default; }
+
+.net-secondary {
+  background: rgba(255,255,255,0.09);
+  color: var(--ink);
+  width: auto;
+  flex: none;
+  padding: 15px 18px;
+}
+
+.net-secondary:active { background: rgba(255,255,255,0.16); }
+
+.net-or {
+  text-align: center;
+  margin: 14px 0 10px;
+  font-size: 0.75rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+}
+
+.join-row { display: flex; gap: 8px; }
+
+.net-code-label {
+  font-size: 0.72rem;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-top: 12px;
+}
+
+.net-code {
+  font-size: 2.4rem;
+  font-weight: 800;
+  letter-spacing: 0.28em;
+  color: var(--gold);
+  margin: 2px 0 14px;
+  text-align: center;
+}
+
+.net-link {
+  font-size: 0.72rem;
+  color: var(--ink-dim);
+  word-break: break-all;
+  margin: 8px 0 4px;
+  user-select: all;
+}
+
+.net-players { list-style: none; margin: 6px 0 16px; padding: 0; }
+
+.net-players li {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 10px;
+  background: rgba(0,0,0,0.22);
+  margin-bottom: 6px;
+  font-size: 0.88rem;
+}
+
+.net-players .pl-state { color: var(--ink-dim); font-size: 0.78rem; }
+
+.net-leave { width: 100%; }
+
+.net-status {
+  margin-top: 12px;
+  font-size: 0.82rem;
+  color: var(--ink-dim);
+  min-height: 1.1rem;
+}
+
+.net-status.is-error { color: #f0a5a5; }
+.net-status.is-good { color: #86e0ae; }
 
 /* ---------- help dialog ---------- */
 

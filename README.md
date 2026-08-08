@@ -20,8 +20,35 @@ keep it hidden from the table, and peek whenever you like.
 - **?** opens the rules and the order of play. Dismiss it with the X, the
   backdrop, or Escape.
 
-Your dice count, peek mode, lock state, and current hand survive a refresh. The cup is always
+- **People icon** opens connected play (see below). Solo is the default and the
+  app never touches the network unless you open it.
+
+Your dice count, peek mode, lock state, name, and current hand survive a refresh. The cup is always
 closed when the page loads, and it snaps shut if the app is backgrounded.
+
+## Playing together
+
+One player creates a game and gets a four-character code; everyone else joins by
+code or by opening the invite link (`.../#CODE`). Each player keeps rolling and
+peeking privately; at the end of a round everyone presses **Reveal** and all the
+dice appear on every phone. The next roll hides them again.
+
+**How it connects.** Phones talk directly over WebRTC. The free public PeerJS
+broker (`0.peerjs.com`) is used only to introduce peers — no game data passes
+through it, and there is no account or API key. The room code *is* the host's
+peer id (`lwdice-<CODE>`), so no lobby service is needed. The library is loaded
+from a CDN, pinned and SRI-checked, and only when you open connected play.
+
+**Topology.** The creator is the host and relays: guests connect to the host,
+and the host rebroadcasts the whole table. It follows that if the host leaves,
+the game ends and everyone is told; guests can come and go freely.
+
+**Hidden dice stay hidden.** Dice values are never transmitted while they are
+under your cup — only a SHA-256 commitment to them. Sending the values early and
+merely hiding them in the UI would leak the whole game to anyone with devtools
+open. At reveal you send the values plus the salt, and every other player checks
+them against the commitment you published when you rolled, so a modified client
+cannot change its dice after the bidding.
 
 ## Implementation
 
