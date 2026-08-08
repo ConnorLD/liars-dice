@@ -14,7 +14,7 @@
 <!-- ?v= is bumped whenever styles.css or app.js changes: GitHub Pages serves
      assets with max-age=600, so without it a returning player can get new
      markup alongside a cached older script. -->
-<link rel="stylesheet" href="styles.css?v=2">
+<link rel="stylesheet" href="styles.css?v=3">
 <title>Liar's Dice Cup</title>
 </head>
 <body>
@@ -49,10 +49,24 @@
     <p id="tally" class="tally" aria-live="polite"></p>
   </section>
 
-  <!-- Primary action -->
-  <button id="rollBtn" class="roll-btn" type="button">
-    <span class="roll-label">Roll</span>
-  </button>
+  <!-- Primary action, plus a padlock that makes it inert mid-round -->
+  <div class="roll-row">
+    <button id="rollBtn" class="roll-btn" type="button">
+      <span class="roll-label">Roll</span>
+    </button>
+
+    <button id="lockBtn" class="lock-btn" type="button" aria-pressed="false"
+            aria-label="Lock the Roll button">
+      <svg class="lock-icon icon-unlocked" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="4" y="10.5" width="16" height="10" rx="2.5"/>
+        <path class="shackle" d="M8 10.5V7a4 4 0 0 1 8 0"/>
+      </svg>
+      <svg class="lock-icon icon-locked" viewBox="0 0 24 24" aria-hidden="true">
+        <rect x="4" y="10.5" width="16" height="10" rx="2.5"/>
+        <path class="shackle" d="M8 10.5V7a4 4 0 0 1 8 0v3.5"/>
+      </svg>
+    </button>
+  </div>
 
   <!-- Dice count -->
   <section class="controls">
@@ -130,6 +144,10 @@
       Whoever lost the die presses <strong>&minus;</strong> here to drop it. At zero
       dice you are out; the last player standing wins.
     </p>
+    <p class="help-note">
+      Tip: once you have rolled, tap the padlock beside <strong>Roll</strong> to
+      lock it. Nothing can re-roll your hand until you unlock it.
+    </p>
 
     <h3>Common house rules</h3>
     <ul>
@@ -141,6 +159,6 @@
   </div>
 </dialog>
 
-<script src="app.js?v=2"></script>
+<script src="app.js?v=3"></script>
 </body>
 </html>

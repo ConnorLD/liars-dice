@@ -213,8 +213,10 @@ h1 {
 
 /* ---------- roll button ---------- */
 
+.roll-row { display: flex; gap: 10px; align-items: stretch; }
+
 .roll-btn {
-  width: 100%;
+  flex: 1;
   padding: 18px;
   border: none;
   border-radius: var(--radius);
@@ -231,6 +233,55 @@ h1 {
 
 .roll-btn:active { transform: translateY(3px); box-shadow: 0 1px 0 #7d5a17; }
 .roll-btn:disabled { opacity: 0.6; }
+
+/* Locked: still focusable and still answers a tap (with an explanation),
+   but visibly dead so nobody expects it to roll. */
+.roll-btn[aria-disabled="true"] {
+  background: linear-gradient(180deg, #5c6560, #454d49);
+  color: rgba(255,255,255,0.5);
+  box-shadow: 0 4px 0 #2f3633;
+  cursor: not-allowed;
+}
+
+.roll-btn[aria-disabled="true"]:active { transform: none; box-shadow: 0 4px 0 #2f3633; }
+
+.lock-btn {
+  flex: none;
+  width: 64px;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: var(--radius);
+  background: rgba(0,0,0,0.28);
+  color: var(--ink-dim);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+
+.lock-btn:active { background: rgba(255,255,255,0.08); }
+
+.lock-btn[aria-pressed="true"] {
+  border-color: var(--gold);
+  background: rgba(227,180,72,0.14);
+  color: var(--gold);
+}
+
+.lock-icon { width: 26px; height: 26px; fill: currentColor; }
+.lock-icon .shackle { fill: none; stroke: currentColor; stroke-width: 2; }
+
+.lock-btn .icon-locked { display: none; }
+.lock-btn[aria-pressed="true"] .icon-unlocked { display: none; }
+.lock-btn[aria-pressed="true"] .icon-locked { display: block; }
+
+.lock-btn.nudge { animation: nudge 320ms ease-in-out; }
+
+@keyframes nudge {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-4px); }
+  60% { transform: translateX(4px); }
+}
+
+@media (prefers-reduced-motion: reduce) { .lock-btn.nudge { animation: none; } }
 
 /* ---------- controls ---------- */
 

@@ -13,6 +13,7 @@
   var tally = document.getElementById('tally');
   var hint = document.getElementById('hint');
   var rollBtn = document.getElementById('rollBtn');
+  var lockBtn = document.getElementById('lockBtn');
   var minusBtn = document.getElementById('minusBtn');
   var plusBtn = document.getElementById('plusBtn');
   var countValue = document.getElementById('countValue');
@@ -27,6 +28,7 @@
     count: START_DICE,
     values: [],      // empty until rolled
     mode: 'hold',    // 'hold' | 'tap'
+    locked: false,   // padlock: guards Roll against a mid-round fat finger
     open: false      // never persisted: the cup always starts closed
   };
 
@@ -44,6 +46,7 @@
       state.count = Math.min(MAX_DICE, Math.max(MIN_DICE, Math.round(saved.count)));
     }
     if (saved.mode === 'tap' || saved.mode === 'hold') state.mode = saved.mode;
+    if (typeof saved.locked === 'boolean') state.locked = saved.locked;
     if (Array.isArray(saved.values) && saved.values.length === state.count) {
       state.values = saved.values.filter(function (v) {
         return typeof v === 'number' && v >= 1 && v <= 6;
@@ -55,7 +58,7 @@
   function save() {
     try {
       window.localStorage.setItem(STORE_KEY, JSON.stringify({
-        count: state.count, values: state.values, mode: state.mode
+        count: state.count, values: state.values, mode: state.mode, locked: state.locked
       }));
     } catch (e) { /* private mode / storage full: the app still works */ }
   }
@@ -115,6 +118,13 @@
     modeText.textContent = state.mode === 'hold' ? 'Hold' : 'Tap';
     modeBtn.setAttribute('aria-pressed', state.mode === 'tap' ? 'true' : 'false');
 
+    // aria-disabled rather than disabled: a dead button explains nothing, so
+    // Roll stays focusable and answers a tap by pointing at the padlock.
+    rollBtn.setAttribute('aria-disabled', state.locked ? 'true' : 'false');
+    lockBtn.setAttribute('aria-pressed', state.locked ? 'true' : 'false');
+    lockBtn.setAttribute('aria-label',
+      state.locked ? 'Unlock the Roll button' : 'Lock the Roll button');
+
     var rolled = state.values.length > 0;
 
     tray.replaceChildren();
@@ -143,7 +153,17 @@
 
   // ---------- actions ----------
 
+  function refuseRoll() {
+    lockBtn.classList.remove('nudge');
+    void lockBtn.offsetWidth; // restart the animation on repeat taps
+    lockBtn.classList.add('nudge');
+    if (navigator.vibrate) navigator.vibrate(12);
+    setHint('Roll is locked. Tap the padlock to unlock it.');
+  }
+
   function roll() {
+    if (state.locked) { refuseRoll(); return; }
+
     state.open = false;
     var values = [];
     for (var i = 0; i < state.count; i++) values.push(d6());
@@ -167,6 +187,9 @@
     // A stale hand would show the wrong number of dice, so clear it.
     state.values = [];
     state.open = false;
+    // Changing the count means a new round is starting and you need to roll,
+    // so leaving Roll locked here would just be a dead end.
+    state.locked = false;
     save();
     render();
     setHint(delta < 0 ? 'Down to ' + next + '. Roll for the next round.'
@@ -185,6 +208,15 @@
   minusBtn.addEventListener('click', function () { changeCount(-1); });
   plusBtn.addEventListener('click', function () { changeCount(1); });
 
+  lockBtn.addEventListener('click', function () {
+    state.locked = !state.locked;
+    save();
+    render();
+    setHint(state.locked
+      ? 'Roll is locked. Your hand is safe from a stray tap.'
+      : 'Roll unlocked.');
+  });
+
   modeBtn.addEventListener('click', function () {
     state.mode = state.mode === 'hold' ? 'tap' : 'hold';
     state.open = false;
@@ -199,6 +231,7 @@
     state.count = START_DICE;
     state.values = [];
     state.open = false;
+    state.locked = false;
     save();
     render();
     setHint('New game. Everyone back to ' + START_DICE + ' dice.');
@@ -271,7 +304,9 @@
 
   load();
   render();
-  if (state.values.length) {
+  if (state.locked) {
+    setHint('Roll is locked. Tap the padlock when you want a new round.');
+  } else if (state.values.length) {
     setHint('Your last roll is still under the cup.');
   }
 })();

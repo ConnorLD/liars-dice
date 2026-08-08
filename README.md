@@ -10,13 +10,17 @@ keep it hidden from the table, and peek whenever you like.
 - **Roll** shakes your dice. They land face-down under the cup.
 - **Hold the cup** to peek at your hand; let go and it hides again.
   Switch *Peek mode* to **Tap** if you would rather tap once to open and once to close.
+- **Padlock** (beside Roll) makes Roll inert so a stray tap mid-round cannot
+  destroy your hand. Tapping a locked Roll nudges the padlock and says why
+  rather than silently doing nothing.
 - **− / +** change how many dice you have (1–6) when you lose or gain one.
-  Changing the count clears the old hand so you never read a stale roll.
+  Changing the count clears the old hand so you never read a stale roll, and
+  releases the lock, since a new round means you need to roll.
 - **New game** resets everyone to five dice.
 - **?** opens the rules and the order of play. Dismiss it with the X, the
   backdrop, or Escape.
 
-Your dice count, peek mode, and current hand survive a refresh. The cup is always
+Your dice count, peek mode, lock state, and current hand survive a refresh. The cup is always
 closed when the page loads, and it snaps shut if the app is backgrounded.
 
 ## Implementation
