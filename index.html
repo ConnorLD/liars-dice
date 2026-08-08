@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f2a22">
+<meta name="description" content="A private dice cup for Liar's Dice. Roll your dice, keep them hidden, peek when you want.">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="stylesheet" href="styles.css">
+<title>Liar's Dice Cup</title>
+</head>
+<body>
+
+<main class="app">
+
+  <header class="topbar">
+    <h1>Liar's Dice</h1>
+    <p class="tagline">Your cup. Nobody else's business.</p>
+  </header>
+
+  <!-- The cup: dice live under here, hidden until you peek -->
+  <section class="cup-wrap">
+    <div id="cup" class="cup" role="button" tabindex="0"
+         aria-label="Dice cup. Press and hold to peek at your dice.">
+
+      <div id="tray" class="tray" aria-live="polite"></div>
+
+      <div id="lid" class="lid">
+        <div class="lid-inner">
+          <svg class="lid-icon" viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 19h16l-2.2-9.5A6 6 0 0 0 11.95 5 6 6 0 0 0 6.2 9.5L4 19Z"/>
+          </svg>
+          <span id="lidText" class="lid-text">Hold to peek</span>
+          <span id="lidSub" class="lid-sub">5 dice under the cup</span>
+        </div>
+      </div>
+
+    </div>
+
+    <p id="tally" class="tally" aria-live="polite"></p>
+  </section>
+
+  <!-- Primary action -->
+  <button id="rollBtn" class="roll-btn" type="button">
+    <span class="roll-label">Roll</span>
+  </button>
+
+  <!-- Dice count -->
+  <section class="controls">
+    <div class="counter">
+      <button id="minusBtn" class="step" type="button" aria-label="Lose a die">&minus;</button>
+      <div class="counter-mid">
+        <span id="countValue" class="count-value">5</span>
+        <span class="count-label">dice</span>
+      </div>
+      <button id="plusBtn" class="step" type="button" aria-label="Gain a die">+</button>
+    </div>
+
+    <div class="options">
+      <button id="modeBtn" class="chip" type="button" aria-pressed="false">
+        Peek mode: <strong id="modeText">Hold</strong>
+      </button>
+      <button id="resetBtn" class="chip" type="button">New game</button>
+    </div>
+  </section>
+
+  <footer class="hint" id="hint">Press Roll, then hold the cup to see your dice.</footer>
+
+</main>
+
+<script src="app.js"></script>
+</body>
+</html>

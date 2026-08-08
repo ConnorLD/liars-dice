@@ -1,0 +1,19 @@
+{
+  "name": "Liar's Dice Cup",
+  "short_name": "Dice Cup",
+  "description": "A private dice cup for Liar's Dice: roll, hide, peek.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0a1f18",
+  "theme_color": "#0f2a22",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}
