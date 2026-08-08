@@ -288,33 +288,44 @@
 
   // ---------- connected play ----------
   //
-  // Peer-to-peer over WebRTC, with the free public PeerJS broker doing nothing
-  // but introductions. The room code IS the host's peer id, so no lobby service
-  // is needed. The host relays: guests talk only to the host, and the host
-  // rebroadcasts the whole table as one authoritative message.
+  // No backend of ours: the whole game is one small JSON blob on a free public
+  // text bin, keyed by the game code. Everyone polls it and writes only their
+  // own slot, merged into the copy they just read. Writes are rare (a roll, a
+  // reveal, a heartbeat), so two players clobbering each other is unlikely --
+  // and a lost write heals on the next heartbeat, because every player keeps
+  // re-asserting its own slot.
   //
-  // Dice values are never transmitted while hidden -- only a hash of them. A
-  // guest who opens devtools can read every message their phone receives, so
-  // sending hidden dice "and hiding them in the UI" would leak the entire game.
+  // The bin is public and unauthenticated, so hidden dice are NEVER written to
+  // it -- only a hash of them. Uploading hidden dice and merely hiding them in
+  // the UI would put every hand at a URL that anyone with the code can read.
 
-  var PEERJS_SRC = 'https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js';
-  var PEERJS_SRI = 'sha384-x0YgkOr/3UOZP2CRDxGW9e0Q+2Qjyr3uJrm4xU32Y7ZCNAo7Cc7bjhrZMi/dwczu';
-  var ROOM_PREFIX = 'lwdice-';
+  var SYNC_URL = 'https://textdb.dev/api/data/';
+  var SYNC_KEY_PREFIX = 'liarsdice-v1-';
+  var POLL_MS = 1500;
+  var HEARTBEAT_MS = 8000;
+  var PLAYER_TTL_MS = 45000;   // a slot nobody refreshes belongs to someone who left
+  var MAX_FAILS = 4;
   // No O/0/I/1: codes get read aloud across a table.
   var CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-  var CODE_LEN = 4;
-  var JOIN_TIMEOUT = 12000;
+  var CODE_LEN = 6;
 
   var net = {
-    peer: null,
-    isHost: false,
     code: null,
-    conns: [],       // host: every guest; guest: just the host
-    players: {},     // peer id -> { id, name, dice, commit, revealed, values, salt }
-    status: 'off',   // off | connecting | live
-    joinTimer: null,
-    codeTries: 0
+    myId: null,
+    players: {},
+    status: 'off',    // off | live
+    timer: null,
+    lastPush: 0,
+    fails: 0,
+    writing: false,
+    dirty: false,
+    offline: false
   };
+
+  // Freshness is tracked by when WE last saw a slot change, never by comparing
+  // our clock to theirs -- phone clocks disagree and would evict live players.
+  var lastSeen = {};
+  var lastSig = {};
 
   function randomBytes(n) {
     var buf = new Uint8Array(n);
@@ -330,11 +341,13 @@
     return out;
   }
 
-  function randomSalt() {
-    return Array.prototype.map.call(randomBytes(8), function (b) {
+  function randomHex(n) {
+    return Array.prototype.map.call(randomBytes(n), function (b) {
       return ('0' + b.toString(16)).slice(-2);
     }).join('');
   }
+
+  function randomSalt() { return randomHex(8); }
 
   function sha256Hex(text) {
     if (!window.crypto || !window.crypto.subtle) return Promise.resolve(null);
@@ -347,38 +360,18 @@
       .catch(function () { return null; });
   }
 
-  var peerLib = null;
+  function selfId() { return net.myId || 'self'; }
 
-  function loadPeerJS() {
-    if (window.Peer) return Promise.resolve(window.Peer);
-    if (peerLib) return peerLib;
-    peerLib = new Promise(function (resolve, reject) {
-      var s = document.createElement('script');
-      s.src = PEERJS_SRC;
-      s.integrity = PEERJS_SRI;
-      s.crossOrigin = 'anonymous';
-      s.async = true;
-      s.onload = function () {
-        if (window.Peer) resolve(window.Peer);
-        else { peerLib = null; reject(new Error('peerjs missing')); }
-      };
-      s.onerror = function () { peerLib = null; reject(new Error('peerjs blocked')); };
-      document.head.appendChild(s);
-    });
-    return peerLib;
-  }
-
-  function selfId() { return (net.peer && net.peer.id) || 'self'; }
-
-  function selfRecord() {
+  function mySlot() {
     return {
       name: state.name,
       dice: state.count,
       commit: state.commit,
       revealed: state.revealed,
-      // The privacy line: dice leave this device only once you reveal.
+      // The privacy line: dice are uploaded only once you reveal them.
       values: state.revealed ? state.values : null,
-      salt: state.revealed ? state.salt : null
+      salt: state.revealed ? state.salt : null,
+      ts: Date.now()
     };
   }
 
@@ -387,16 +380,96 @@
     return {
       id: id,
       name: (typeof p.name === 'string' && p.name.trim()) ? p.name.trim().slice(0, 14) : 'Player',
-      dice: typeof p.dice === 'number' ? p.dice : 0,
-      commit: p.commit || null,
+      dice: typeof p.dice === 'number' ? Math.max(0, Math.min(6, Math.round(p.dice))) : 0,
+      commit: typeof p.commit === 'string' ? p.commit : null,
       revealed: !!p.revealed,
-      values: Array.isArray(p.values) ? p.values : null,
-      salt: p.salt || null
+      values: Array.isArray(p.values) ? p.values.slice(0, 6) : null,
+      salt: typeof p.salt === 'string' ? p.salt : null,
+      ts: typeof p.ts === 'number' ? p.ts : 0
     };
   }
 
-  function safeSend(conn, msg) {
-    try { conn.send(msg); } catch (e) { /* connection died mid-send */ }
+  // ---------- the shared blob ----------
+
+  function blobUrl(code) { return SYNC_URL + SYNC_KEY_PREFIX + code; }
+
+  function fetchBlob(code) {
+    return fetch(blobUrl(code), { method: 'GET', cache: 'no-store' })
+      .then(function (r) {
+        if (!r.ok) throw new Error('read ' + r.status);
+        return r.text();
+      })
+      .then(function (text) {
+        var empty = { code: code, players: {} };
+        if (!text) return empty;
+        var data;
+        try { data = JSON.parse(text); } catch (e) { return empty; }
+        if (!data || typeof data !== 'object' || !data.players || typeof data.players !== 'object') {
+          return empty;
+        }
+        return data;
+      });
+  }
+
+  function writeBlob(code, data) {
+    // text/plain keeps this a CORS "simple request", so there is no preflight.
+    return fetch(blobUrl(code), {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: JSON.stringify(data)
+    }).then(function (r) {
+      if (!r.ok) throw new Error('write ' + r.status);
+    });
+  }
+
+  // Only used to decide whether a code is already in use, where we have no
+  // local history to compare against and must trust their clocks a little.
+  function looksOccupied(players) {
+    var now = Date.now(), live = 0;
+    Object.keys(players || {}).forEach(function (id) {
+      var p = players[id];
+      if (p && typeof p.ts === 'number' && now - p.ts < PLAYER_TTL_MS) live++;
+    });
+    return live;
+  }
+
+  // Everything about a slot except its heartbeat, for comparing two copies.
+  function slotCore(p) {
+    return JSON.stringify([p.name, p.dice, p.commit, !!p.revealed, p.values || null]);
+  }
+
+  function applyPlayers(players) {
+    players = players || {};
+    var now = Date.now();
+    var next = {};
+
+    Object.keys(players).forEach(function (id) {
+      var slot = normalise(id, players[id]);
+      var sig = JSON.stringify(slot);
+      if (lastSig[id] !== sig) { lastSig[id] = sig; lastSeen[id] = now; }
+      if (id === selfId() || now - lastSeen[id] <= PLAYER_TTL_MS) next[id] = slot;
+    });
+
+    // We are the authority on ourselves; our own slot may not have landed yet.
+    next[selfId()] = normalise(selfId(), mySlot());
+
+    Object.keys(lastSeen).forEach(function (id) {
+      if (!next[id]) { delete lastSeen[id]; delete lastSig[id]; }
+    });
+
+    net.players = next;
+
+    // If someone's write landed on top of ours, our slot on the server is now
+    // stale or gone. Re-assert it rather than waiting for the next heartbeat.
+    if (net.status === 'live' && !net.writing) {
+      var mine = normalise(selfId(), mySlot());
+      var theirCopy = players[selfId()];
+      var clobbered = !theirCopy || slotCore(normalise(selfId(), theirCopy)) !== slotCore(mine);
+      if (clobbered && now - net.lastPush > 1000) sendMe();
+    }
+
+    verifyReveals();
+    renderNet();
   }
 
   function verifyReveals() {
@@ -413,43 +486,75 @@
     });
   }
 
-  function broadcastTable() {
-    if (!net.isHost || net.status !== 'live') return;
-    net.players[selfId()] = normalise(selfId(), selfRecord());
-    var msg = { t: 'table', code: net.code, players: net.players };
-    net.conns.forEach(function (c) { if (c.open) safeSend(c, msg); });
-    verifyReveals();
-    renderNet();
-  }
+  // ---------- sync loop ----------
 
-  function sendMe() {
-    if (net.status !== 'live') return;
-    if (net.isHost) { broadcastTable(); return; }
-    net.players[selfId()] = normalise(selfId(), selfRecord());
-    var c = net.conns[0];
-    if (c && c.open) safeSend(c, { t: 'me', p: selfRecord() });
-    renderNet();
-  }
-
-  function applyTable(msg) {
-    var incoming = msg.players || {};
-    var next = {};
-    Object.keys(incoming).forEach(function (id) { next[id] = normalise(id, incoming[id]); });
-    // We are the authority on ourselves; the host's echo can lag a tap behind.
-    next[selfId()] = normalise(selfId(), selfRecord());
-    net.players = next;
-    if (msg.code) net.code = msg.code;
-    verifyReveals();
-    renderNet();
-  }
-
-  function dropConn(conn) {
-    net.conns = net.conns.filter(function (c) { return c !== conn; });
-    if (net.isHost) {
-      delete net.players[conn.peer];
-      broadcastTable();
-      setNetStatus('A player left the table.');
+  function noteOk() {
+    net.fails = 0;
+    if (net.offline) {
+      net.offline = false;
+      setNetStatus('Back in sync.', 'good');
+      renderNet();
     }
+  }
+
+  function noteFail() {
+    net.fails++;
+    if (net.fails >= MAX_FAILS && !net.offline) {
+      net.offline = true;
+      setNetStatus('Connection lost. Still retrying -- your own dice work as normal.', 'error');
+      renderNet();
+    }
+  }
+
+  // Push our slot, merged into whatever is on the server right now.
+  function sendMe() {
+    if (net.status !== 'live' || !net.code) return;
+    if (net.writing) { net.dirty = true; return; }
+
+    net.writing = true;
+    var code = net.code;
+
+    fetchBlob(code)
+      .then(function (blob) {
+        if (net.status !== 'live' || net.code !== code) return null;
+        blob.code = code;
+        blob.players = blob.players || {};
+        blob.players[net.myId] = mySlot();
+        return writeBlob(code, blob).then(function () {
+          net.lastPush = Date.now();
+          noteOk();
+          applyPlayers(blob.players);
+        });
+      })
+      .catch(function () { noteFail(); })
+      .then(function () {
+        net.writing = false;
+        if (net.dirty) { net.dirty = false; sendMe(); }
+      });
+  }
+
+  function pollOnce() {
+    if (net.status !== 'live' || !net.code) return;
+    var code = net.code;
+
+    fetchBlob(code)
+      .then(function (blob) {
+        if (net.status !== 'live' || net.code !== code) return;
+        noteOk();
+        applyPlayers(blob.players);
+        // Heartbeat: keeps our slot from ageing out of everyone else's table.
+        if (Date.now() - net.lastPush > HEARTBEAT_MS) sendMe();
+      })
+      .catch(function () { noteFail(); });
+  }
+
+  function startPolling() {
+    stopPolling();
+    net.timer = setInterval(pollOnce, POLL_MS);
+  }
+
+  function stopPolling() {
+    if (net.timer) { clearInterval(net.timer); net.timer = null; }
   }
 
   function setNetStatus(text, kind) {
@@ -458,134 +563,100 @@
   }
 
   function teardown() {
-    if (net.joinTimer) { clearTimeout(net.joinTimer); net.joinTimer = null; }
-    net.conns.forEach(function (c) { try { c.close(); } catch (e) {} });
-    if (net.peer) { try { net.peer.destroy(); } catch (e) {} }
-    net.peer = null;
-    net.conns = [];
-    net.players = {};
-    net.isHost = false;
+    stopPolling();
     net.code = null;
+    net.myId = null;
+    net.players = {};
     net.status = 'off';
+    net.fails = 0;
+    net.offline = false;
+    net.writing = false;
+    net.dirty = false;
+    lastSeen = {};
+    lastSig = {};
     state.revealed = false;
     if (location.hash) history.replaceState(null, '', location.pathname + location.search);
     render();
   }
 
-  function onLive() {
+  function onLive(created) {
     net.status = 'live';
-    net.codeTries = 0;
     history.replaceState(null, '', location.pathname + location.search + '#' + net.code);
-    setNetStatus(net.isHost
+    setNetStatus(created
       ? 'Game open. Share the code or link.'
-      : 'Connected to game ' + net.code + '.', 'good');
-    sendMe();
+      : 'Joined game ' + net.code + '.', 'good');
     render();
   }
 
-  function handlePeerError(err) {
-    var type = (err && err.type) || '';
-    if (type === 'unavailable-id' && net.isHost) {
-      // That code is already someone else's game; take another one.
-      net.codeTries++;
-      try { net.peer.destroy(); } catch (e) {}
-      if (net.codeTries < 4) { hostGame(); return; }
-      setNetStatus('Could not claim a game code. Try again in a moment.', 'error');
-    } else if (type === 'peer-unavailable') {
-      setNetStatus('No open game with that code. Check it, or create one.', 'error');
-    } else if (type === 'network' || type === 'server-error' || type === 'socket-error') {
-      setNetStatus('Cannot reach the matchmaking service right now.', 'error');
-    } else if (type === 'browser-incompatible') {
-      setNetStatus('This browser cannot do peer-to-peer play.', 'error');
-    } else {
-      setNetStatus('Connection problem. Try again.', 'error');
-    }
-    if (net.status !== 'live') teardown();
-    renderNet();
+  function enter(code, created) {
+    net.code = code;
+    net.myId = 'p' + randomHex(8);
+    net.players = {};
+    lastSeen = {};
+    lastSig = {};
+    net.fails = 0;
+    net.offline = false;
+    net.lastPush = 0;
+    onLive(created);
+    sendMe();
+    startPolling();
   }
 
-  function hostGame() {
+  function createGame(attempt) {
+    attempt = attempt || 1;
+    var code = randomCode();
     setNetStatus('Opening a game...');
     createBtn.disabled = true;
-    loadPeerJS().then(function (Peer) {
-      var code = randomCode();
-      var peer = new Peer(ROOM_PREFIX + code, { debug: 0 });
-      net.peer = peer;
-      net.isHost = true;
-      net.code = code;
-      net.status = 'connecting';
 
-      peer.on('open', function () {
+    fetchBlob(code)
+      .then(function (blob) {
+        // Astronomically unlikely, but a live game there would be a disaster.
+        if (looksOccupied(blob.players) > 0 && attempt < 4) {
+          createBtn.disabled = false;
+          createGame(attempt + 1);
+          return;
+        }
         createBtn.disabled = false;
-        net.players = {};
-        onLive();
+        enter(code, true);
+      })
+      .catch(function () {
+        createBtn.disabled = false;
+        setNetStatus('Cannot reach the game service. Check your signal.', 'error');
       });
-
-      peer.on('connection', function (conn) {
-        conn.on('open', function () {
-          net.conns.push(conn);
-          broadcastTable();
-          setNetStatus('Someone joined.', 'good');
-        });
-        conn.on('data', function (msg) {
-          if (!msg || (msg.t !== 'me' && msg.t !== 'join')) return;
-          net.players[conn.peer] = normalise(conn.peer, msg.p);
-          broadcastTable();
-        });
-        conn.on('close', function () { dropConn(conn); });
-        conn.on('error', function () { dropConn(conn); });
-      });
-
-      peer.on('error', function (err) { createBtn.disabled = false; handlePeerError(err); });
-    }).catch(function () {
-      createBtn.disabled = false;
-      setNetStatus('Could not load the connection library. Check your signal.', 'error');
-    });
   }
 
   function joinGame(code) {
     setNetStatus('Looking for game ' + code + '...');
-    loadPeerJS().then(function (Peer) {
-      var peer = new Peer({ debug: 0 });
-      net.peer = peer;
-      net.isHost = false;
-      net.code = code;
-      net.status = 'connecting';
+    joinBtn.disabled = true;
 
-      peer.on('open', function () {
-        var conn = peer.connect(ROOM_PREFIX + code, { reliable: true });
-        net.conns = [conn];
-
-        net.joinTimer = setTimeout(function () {
-          if (net.status !== 'live') {
-            setNetStatus('No answer from game ' + code + '. Is it still open?', 'error');
-            teardown();
-            renderNet();
-          }
-        }, JOIN_TIMEOUT);
-
-        conn.on('open', function () {
-          clearTimeout(net.joinTimer);
-          net.joinTimer = null;
-          onLive();
-          safeSend(conn, { t: 'join', p: selfRecord() });
-        });
-        conn.on('data', function (msg) { if (msg && msg.t === 'table') applyTable(msg); });
-        conn.on('close', function () {
-          if (net.status === 'live') {
-            teardown();
-            setNetStatus('The host closed the game.', 'error');
-            setHint('The game ended. Your dice are still yours.');
-            renderNet();
-          }
-        });
-        conn.on('error', function () { handlePeerError({ type: 'peer-unavailable' }); });
+    fetchBlob(code)
+      .then(function (blob) {
+        joinBtn.disabled = false;
+        if (looksOccupied(blob.players) === 0) {
+          setNetStatus('No active game with that code. Check it, or create one.', 'error');
+          return;
+        }
+        enter(code, false);
+      })
+      .catch(function () {
+        joinBtn.disabled = false;
+        setNetStatus('Cannot reach the game service. Check your signal.', 'error');
       });
+  }
 
-      peer.on('error', function (err) { handlePeerError(err); });
-    }).catch(function () {
-      setNetStatus('Could not load the connection library. Check your signal.', 'error');
-    });
+  function leaveGame() {
+    var code = net.code, id = net.myId;
+    stopPolling();
+    if (code && id) {
+      // Best effort: drop our slot so nobody waits out the timeout for us.
+      fetchBlob(code).then(function (blob) {
+        if (blob.players) delete blob.players[id];
+        return writeBlob(code, blob);
+      }).catch(function () {});
+    }
+    teardown();
+    setNetStatus('You left the game.');
+    renderNet();
   }
 
   function doReveal() {
@@ -690,8 +761,7 @@
     players.forEach(function (p) {
       var li = document.createElement('li');
       var who = document.createElement('span');
-      who.textContent = (p.id === selfId() ? 'You' : p.name) +
-        (net.isHost && p.id === selfId() ? ' (host)' : '');
+      who.textContent = p.id === selfId() ? 'You' : p.name;
       var st = document.createElement('span');
       st.className = 'pl-state';
       st.textContent = p.revealed ? 'revealed' : p.dice + (p.dice === 1 ? ' die' : ' dice');
@@ -726,8 +796,7 @@
 
   createBtn.addEventListener('click', function () {
     if (net.status !== 'off') return;
-    net.codeTries = 0;
-    hostGame();
+    createGame();
   });
 
   joinForm.addEventListener('submit', function (e) {
@@ -752,18 +821,13 @@
     }
   });
 
-  leaveBtn.addEventListener('click', function () {
-    teardown();
-    setNetStatus('You left the game.');
-    renderNet();
-  });
+  leaveBtn.addEventListener('click', leaveGame);
 
   revealBtn.addEventListener('click', doReveal);
 
-  // Let the host see us go instead of waiting for a timeout.
-  window.addEventListener('pagehide', function () {
-    if (net.peer) { try { net.peer.destroy(); } catch (e) {} }
-  });
+  // Closing the tab cannot reliably finish a read-modify-write, so we just stop
+  // refreshing our slot and let it age out of everyone else's table.
+  window.addEventListener('pagehide', stopPolling);
 
   // ---------- help ----------
 

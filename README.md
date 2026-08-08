@@ -33,22 +33,37 @@ code or by opening the invite link (`.../#CODE`). Each player keeps rolling and
 peeking privately; at the end of a round everyone presses **Reveal** and all the
 dice appear on every phone. The next roll hides them again.
 
-**How it connects.** Phones talk directly over WebRTC. The free public PeerJS
-broker (`0.peerjs.com`) is used only to introduce peers — no game data passes
-through it, and there is no account or API key. The room code *is* the host's
-peer id (`lwdice-<CODE>`), so no lobby service is needed. The library is loaded
-from a CDN, pinned and SRI-checked, and only when you open connected play.
+**How it syncs.** The whole game is one small JSON blob on
+[textdb.dev](https://textdb.dev), a free public text bin — no account, no API
+key, no backend of ours, nothing embedded in the page. The blob key is
+`liarsdice-v1-<CODE>`, so the game code is all anyone needs to find it. Every
+player polls it every 1.5s and writes only their own slot, merged into the copy
+they just read.
 
-**Topology.** The creator is the host and relays: guests connect to the host,
-and the host rebroadcasts the whole table. It follows that if the host leaves,
-the game ends and everyone is told; guests can come and go freely.
+There is no host and no server logic: each player is just another slot in the
+blob. Writes happen on a roll, a reveal, a name change, and a heartbeat every
+8s, so simultaneous writes are rare — and a clobbered write heals within a
+heartbeat, because everyone keeps re-asserting their own slot. Players who stop
+refreshing disappear from the table after 45s. Staleness is measured by when
+*this* device last saw a slot change, never by comparing clocks, because phone
+clocks disagree and would evict live players.
 
-**Hidden dice stay hidden.** Dice values are never transmitted while they are
-under your cup — only a SHA-256 commitment to them. Sending the values early and
-merely hiding them in the UI would leak the whole game to anyone with devtools
-open. At reveal you send the values plus the salt, and every other player checks
-them against the commitment you published when you rolled, so a modified client
-cannot change its dice after the bidding.
+If the bin is unreachable the app says "connection lost", keeps retrying, and
+every solo feature carries on working.
+
+**Hidden dice stay hidden.** Dice values are never uploaded while they are under
+your cup — only a SHA-256 commitment to them. The bin is public and
+unauthenticated, so writing hidden dice and merely hiding them in the UI would
+put every hand at a URL anyone with the code can read. At reveal you upload the
+values plus the salt, and every other player checks them against the commitment
+you published when you rolled, so a modified client cannot change its dice after
+the bidding.
+
+**What this means for privacy.** Anyone who knows or guesses a game code can read
+that game's blob and overwrite it. Codes are six characters from a 32-character
+alphabet (about 1.07 billion), and only revealed dice — public information at the
+showdown anyway — plus names and dice counts are ever written. Do not treat the
+code as a secret worth anything else.
 
 ## Implementation
 

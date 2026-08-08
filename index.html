@@ -14,7 +14,7 @@
 <!-- ?v= is bumped whenever styles.css or app.js changes: GitHub Pages serves
      assets with max-age=600, so without it a returning player can get new
      markup alongside a cached older script. -->
-<link rel="stylesheet" href="styles.css?v=4">
+<link rel="stylesheet" href="styles.css?v=5">
 <title>Liar's Dice Cup</title>
 </head>
 <body>
@@ -136,7 +136,7 @@
       <p class="net-or">or join one</p>
 
       <form id="joinForm" class="join-row">
-        <input id="codeInput" class="field-input code-input" type="text" maxlength="4"
+        <input id="codeInput" class="field-input code-input" type="text" maxlength="6"
                inputmode="text" autocapitalize="characters" autocomplete="off"
                spellcheck="false" placeholder="CODE" aria-label="Game code">
         <button id="joinBtn" class="net-secondary" type="submit">Join</button>
@@ -160,9 +160,10 @@
     <p id="netStatus" class="net-status" role="status"></p>
 
     <p class="help-note">
-      Your dice are never sent to anyone until you press <strong>Reveal</strong>.
-      Everything goes straight between phones &mdash; there is no server holding
-      the game.
+      Your dice stay on this phone until you press <strong>Reveal</strong> &mdash;
+      only a fingerprint of them is shared before that. The game itself lives in
+      a small public note on the internet, so treat the code as the only lock on
+      it and start a fresh game when you are done.
     </p>
   </div>
 </dialog>
@@ -243,6 +244,6 @@
   </div>
 </dialog>
 
-<script src="app.js?v=4"></script>
+<script src="app.js?v=5"></script>
 </body>
 </html>
