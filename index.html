@@ -11,7 +11,10 @@
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon.svg">
-<link rel="stylesheet" href="styles.css">
+<!-- ?v= is bumped whenever styles.css or app.js changes: GitHub Pages serves
+     assets with max-age=600, so without it a returning player can get new
+     markup alongside a cached older script. -->
+<link rel="stylesheet" href="styles.css?v=2">
 <title>Liar's Dice Cup</title>
 </head>
 <body>
@@ -138,6 +141,6 @@
   </div>
 </dialog>
 
-<script src="app.js"></script>
+<script src="app.js?v=2"></script>
 </body>
 </html>

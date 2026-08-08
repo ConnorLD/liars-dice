@@ -22,6 +22,9 @@ closed when the page loads, and it snaps shut if the app is backgrounded.
 ## Implementation
 
 Static page, no build step, no dependencies: `index.html`, `styles.css`, `app.js`.
+`index.html` loads the CSS and JS with a `?v=N` query; **bump that number whenever
+you change either file**, or returning players can run new markup against a
+script GitHub Pages still has cached (`max-age=600`).
 Rolls use `crypto.getRandomValues` with rejection sampling so all six faces are
 equally likely. Served from GitHub Pages off `main`.
 
