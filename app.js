@@ -5,6 +5,8 @@
   var MAX_DICE = 6;
   var START_DICE = 5;
   var STORE_KEY = 'liars-dice-v1';
+  // Kept apart from the game state so resetting a game never changes who we are.
+  var DEVICE_KEY = 'liars-dice-device-v1';
 
   var cup = document.getElementById('cup');
   var tray = document.getElementById('tray');
@@ -55,7 +57,8 @@
     name: '',        // how you appear to the rest of the table
     revealed: false, // this round's dice have been shown to the others
     salt: null,      // commit-reveal: proves the revealed dice are the rolled ones
-    commit: null
+    commit: null,
+    gameCode: null   // which game the round state above belongs to
   };
 
   // ---------- persistence ----------
@@ -74,6 +77,12 @@
     if (saved.mode === 'tap' || saved.mode === 'hold') state.mode = saved.mode;
     if (typeof saved.locked === 'boolean') state.locked = saved.locked;
     if (typeof saved.name === 'string') state.name = saved.name.slice(0, 14);
+    // Round state is restored so a refresh mid-game comes back as the same
+    // player showing the same hand, rather than as a silent re-roll.
+    if (typeof saved.gameCode === 'string') state.gameCode = saved.gameCode;
+    if (typeof saved.salt === 'string') state.salt = saved.salt;
+    if (typeof saved.commit === 'string') state.commit = saved.commit;
+    if (typeof saved.revealed === 'boolean') state.revealed = saved.revealed;
     if (Array.isArray(saved.values) && saved.values.length === state.count) {
       state.values = saved.values.filter(function (v) {
         return typeof v === 'number' && v >= 1 && v <= 6;
@@ -86,7 +95,8 @@
     try {
       window.localStorage.setItem(STORE_KEY, JSON.stringify({
         count: state.count, values: state.values, mode: state.mode,
-        locked: state.locked, name: state.name
+        locked: state.locked, name: state.name, gameCode: state.gameCode,
+        salt: state.salt, commit: state.commit, revealed: state.revealed
       }));
     } catch (e) { /* private mode / storage full: the app still works */ }
   }
@@ -208,7 +218,8 @@
       sendMe();
       sha256Hex(state.salt + ':' + values.join('')).then(function (h) {
         state.commit = h;
-        sendMe();
+        save();      // the commitment must survive a refresh, or the reveal
+        sendMe();    // that follows it can never be verified
       });
     }
 
@@ -319,7 +330,9 @@
     fails: 0,
     writing: false,
     dirty: false,
-    offline: false
+    offline: false,
+    session: null,   // this tab, within this device's identity
+    yielded: false   // another tab took over our slot; stop fighting it
   };
 
   // Freshness is tracked by when WE last saw a slot change, never by comparing
@@ -360,6 +373,17 @@
       .catch(function () { return null; });
   }
 
+  // One identity per device, reused across games and page loads. This is what
+  // makes a refresh reclaim your existing slot instead of adding a second one.
+  function deviceId() {
+    var id;
+    try { id = window.localStorage.getItem(DEVICE_KEY); } catch (e) { id = null; }
+    if (typeof id === 'string' && /^p[0-9a-f]{16}$/.test(id)) return id;
+    id = 'p' + randomHex(8);
+    try { window.localStorage.setItem(DEVICE_KEY, id); } catch (e) { /* private mode */ }
+    return id;
+  }
+
   function selfId() { return net.myId || 'self'; }
 
   function mySlot() {
@@ -371,7 +395,9 @@
       // The privacy line: dice are uploaded only once you reveal them.
       values: state.revealed ? state.values : null,
       salt: state.revealed ? state.salt : null,
-      ts: Date.now()
+      ts: Date.now(),
+      // Distinguishes two tabs on one device, which share an identity.
+      session: net.session
     };
   }
 
@@ -385,7 +411,8 @@
       revealed: !!p.revealed,
       values: Array.isArray(p.values) ? p.values.slice(0, 6) : null,
       salt: typeof p.salt === 'string' ? p.salt : null,
-      ts: typeof p.ts === 'number' ? p.ts : 0
+      ts: typeof p.ts === 'number' ? p.ts : 0,
+      session: typeof p.session === 'string' ? p.session : null
     };
   }
 
@@ -459,13 +486,22 @@
 
     net.players = next;
 
-    // If someone's write landed on top of ours, our slot on the server is now
-    // stale or gone. Re-assert it rather than waiting for the next heartbeat.
     if (net.status === 'live' && !net.writing) {
       var mine = normalise(selfId(), mySlot());
       var theirCopy = players[selfId()];
-      var clobbered = !theirCopy || slotCore(normalise(selfId(), theirCopy)) !== slotCore(mine);
-      if (clobbered && now - net.lastPush > 1000) sendMe();
+
+      // Two tabs on one device share an identity. Without this they would
+      // re-assert over each other forever; instead the older tab goes quiet
+      // and the newest one drives, until the user acts here again.
+      net.yielded = !!(theirCopy && theirCopy.session && theirCopy.session !== net.session &&
+                       theirCopy.ts > net.lastPush);
+
+      // Otherwise, if someone's write landed on top of ours, our slot is stale
+      // or gone: re-assert it rather than waiting for the next heartbeat.
+      if (!net.yielded) {
+        var clobbered = !theirCopy || slotCore(normalise(selfId(), theirCopy)) !== slotCore(mine);
+        if (clobbered && now - net.lastPush > 1000) sendMe(true);
+      }
     }
 
     verifyReveals();
@@ -507,9 +543,17 @@
   }
 
   // Push our slot, merged into whatever is on the server right now.
-  function sendMe() {
+  // auto=true for background writes (heartbeat, re-assert); a user action
+  // passes nothing and thereby takes the identity back from another tab.
+  function sendMe(auto) {
     if (net.status !== 'live' || !net.code) return;
-    if (net.writing) { net.dirty = true; return; }
+    if (auto && net.yielded) return;
+    if (!auto) net.yielded = false;
+    if (net.writing) {
+      net.dirty = true;
+      if (!auto) net.dirtyUser = true;   // don't let a coalesced background
+      return;                            // write inherit user intent
+    }
 
     net.writing = true;
     var code = net.code;
@@ -519,6 +563,15 @@
         if (net.status !== 'live' || net.code !== code) return null;
         blob.code = code;
         blob.players = blob.players || {};
+        // Sweep out slots abandoned long ago so the blob cannot grow forever.
+        // The window is wide enough that clock skew cannot evict a live player.
+        var cutoff = Date.now() - 600000;
+        Object.keys(blob.players).forEach(function (id) {
+          var p = blob.players[id];
+          if (id !== net.myId && p && typeof p.ts === 'number' && p.ts < cutoff) {
+            delete blob.players[id];
+          }
+        });
         blob.players[net.myId] = mySlot();
         return writeBlob(code, blob).then(function () {
           net.lastPush = Date.now();
@@ -529,7 +582,12 @@
       .catch(function () { noteFail(); })
       .then(function () {
         net.writing = false;
-        if (net.dirty) { net.dirty = false; sendMe(); }
+        if (net.dirty) {
+          net.dirty = false;
+          var wasUser = net.dirtyUser;
+          net.dirtyUser = false;
+          sendMe(wasUser ? undefined : true);
+        }
       });
   }
 
@@ -543,7 +601,7 @@
         noteOk();
         applyPlayers(blob.players);
         // Heartbeat: keeps our slot from ageing out of everyone else's table.
-        if (Date.now() - net.lastPush > HEARTBEAT_MS) sendMe();
+        if (Date.now() - net.lastPush > HEARTBEAT_MS) sendMe(true);
       })
       .catch(function () { noteFail(); });
   }
@@ -572,9 +630,14 @@
     net.offline = false;
     net.writing = false;
     net.dirty = false;
+    net.yielded = false;
+    net.session = null;
     lastSeen = {};
     lastSig = {};
     state.revealed = false;
+    state.commit = null;
+    state.gameCode = null;
+    save();
     if (location.hash) history.replaceState(null, '', location.pathname + location.search);
     render();
   }
@@ -590,13 +653,29 @@
 
   function enter(code, created) {
     net.code = code;
-    net.myId = 'p' + randomHex(8);
+    // Stable across reloads, so writing our slot REPLACES the one we left
+    // behind rather than adding a ghost beside it.
+    net.myId = deviceId();
+    net.session = randomHex(4);
     net.players = {};
     lastSeen = {};
     lastSig = {};
     net.fails = 0;
     net.offline = false;
+    net.yielded = false;
     net.lastPush = 0;
+
+    // Round state belongs to one game. Rejoining the same code keeps your hand
+    // exactly as it was; a different game starts you hidden and uncommitted,
+    // so a stale reveal cannot follow you into it.
+    if (state.gameCode !== code) {
+      state.revealed = false;
+      state.commit = null;
+      state.salt = null;
+    }
+    state.gameCode = code;
+    save();
+
     onLive(created);
     sendMe();
     startPolling();
@@ -632,7 +711,10 @@
     fetchBlob(code)
       .then(function (blob) {
         joinBtn.disabled = false;
-        if (looksOccupied(blob.players) === 0) {
+        // Our own slot counts: rejoining a game we were alone in must work
+        // even after our slot has gone quiet.
+        var ours = blob.players && blob.players[deviceId()];
+        if (looksOccupied(blob.players) === 0 && !ours) {
           setNetStatus('No active game with that code. Check it, or create one.', 'error');
           return;
         }
@@ -664,6 +746,7 @@
     if (!state.values.length) { setHint('Roll before you reveal.'); return; }
     if (state.revealed) return;
     state.revealed = true;
+    save();          // so a refresh comes back still revealed, not silently hidden
     sendMe();
     render();
     setHint('Your dice are on the table.');
@@ -734,6 +817,10 @@
     if (!live) {
       showdown.hidden = true;
       showdown.replaceChildren();
+      // Don't leave the last game's code sitting in the panel.
+      netCodeEl.textContent = '------';
+      netLink.textContent = '';
+      netPlayers.replaceChildren();
       return;
     }
 
@@ -903,11 +990,20 @@
   // Also on hashchange: tapping an invite while the app is already open is a
   // same-document navigation, so nothing would happen on load alone.
   function followLinkCode() {
-    if (net.status !== 'off') return;
     var linkCode = (location.hash || '').replace('#', '').toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (linkCode.length !== CODE_LEN) return;
+
+    // Already in this game: tapping the invite again must do nothing at all.
+    // Re-joining would rewrite our slot for no reason.
+    if (net.status === 'live' && net.code === linkCode) return;
+
+    // A link to a different game replaces the one we are in.
+    if (net.status === 'live') leaveGame();
+
     codeInput.value = linkCode;
-    openNet();
+    // A genuine invite opens the panel so you can see you have arrived. Coming
+    // back to a game you were already in should just put you at the table.
+    if (state.gameCode !== linkCode) openNet();
     joinGame(linkCode);
   }
 

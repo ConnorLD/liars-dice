@@ -41,7 +41,12 @@ player polls it every 1.5s and writes only their own slot, merged into the copy
 they just read.
 
 There is no host and no server logic: each player is just another slot in the
-blob. Writes happen on a roll, a reveal, a name change, and a heartbeat every
+blob. Your slot key is a device id kept in `localStorage` and reused across
+games and reloads, so refreshing or re-opening an invite link **reclaims** your
+existing slot instead of adding a duplicate. Round state (hand, commitment,
+whether you have revealed) is saved against the game code, so a refresh puts you
+back exactly where you were — while joining a *different* game starts you hidden,
+so a stale reveal cannot follow you across. Writes happen on a roll, a reveal, a name change, and a heartbeat every
 8s, so simultaneous writes are rare — and a clobbered write heals within a
 heartbeat, because everyone keeps re-asserting their own slot. Players who stop
 refreshing disappear from the table after 45s. Staleness is measured by when
